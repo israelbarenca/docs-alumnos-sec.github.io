@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Consulta de documentos</title>
+  <style>
+    body{margin:0;font-family:system-ui,Segoe UI,Roboto,Inter,Arial;background:#0b1320;color:#eaf0ff}
+    .wrap{max-width:700px;margin:0 auto;padding:24px 16px}
+    h1{font-size:clamp(22px,4vw,30px);margin:8px 0 4px}
+    p{color:#a7b0c6;margin:0 0 14px}
+    .box{display:flex;gap:8px;margin:14px 0 18px}
+    input[type=search]{flex:1;padding:12px 14px;border-radius:12px;border:1px solid #26324b;background:#141c2f;color:#eaf0ff;font-size:16px;outline:none}
+    button{padding:12px 16px;border-radius:12px;border:0;background:#6aa6ff;color:#0b1320;font-weight:700;cursor:pointer}
+    .muted{color:#a7b0c6}
+    .card{background:#141c2f;border:1px solid #26324b;border-radius:14px;padding:12px;margin:10px 0}
+    .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+    a.btn{display:inline-block;background:#9be3b3;color:#0b1320;text-decoration:none;padding:8px 10px;border-radius:10px;font-weight:700}
+    .empty{border:1px dashed #26324b;border-radius:14px;padding:16px;text-align:center;color:#a7b0c6}
+    .spinner{display:inline-block;width:20px;height:20px;border:3px solid #6aa6ff;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    footer{margin-top:28px;color:#a7b0c6;font-size:14px}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>Documentos del alumno</h1>
+    <p>Escribe tu <strong>número de usuario</strong> y presiona <strong>Enter</strong> o “Buscar”.</p>
+
+    <div class="box">
+      <input id="q" type="search" inputmode="numeric" pattern="[0-9]*" placeholder="Ejemplo: 20230123" autocomplete="off">
+      <button id="btn">Buscar</button>
+    </div>
+
+    <div id="status" class="muted"></div>
+    <div id="results"></div>
+
+    <footer>
+      <small>Si no encuentras tu documento, verifica el número o contacta a soporte.</small>
+    </footer>
+  </main>
+
+  <script>
+    const WEB_APP_URL = "https://script.google.com/a/macros/anahuacmayab.mx/s/AKfycbzHVQFekr8m3d-iIMmGhJeXfdiMQH3LeRPki7w9pxUaB3nqH3sSffCtntXovCfpsO-8/exec"; // <-- pega aquí la URL del Apps Script
+
+    const $q = document.getElementById('q');
+    const $btn = document.getElementById('btn');
+    const $status = document.getElementById('status');
+    const $results = document.getElementById('results');
+
+    // Guarda último número en el navegador
+    const last = localStorage.getItem('alumno_id');
+    if (last) $q.value = last;
+
+    function onlyDigits(s){ return (s||'').replace(/\D/g,''); }
+
+    async function search() {
+      const raw = $q.value.trim();
+      const id = onlyDigits(raw);
+      if (!id) {
+        $status.textContent = "Ingresa un número válido.";
+        $results.innerHTML = "";
+        return;
+      }
+      localStorage.setItem('alumno_id', id);
+
+      $status.innerHTML = `<span class="spinner"></span> Buscando documentos…`;
+      $results.innerHTML = "";
+
+      try {
+        const url = WEB_APP_URL + `?id=${encodeURIComponent(id)}`;
+        const res = await fetch(url, { method: 'GET' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+
+        if (!data.ok) {
+          $status.textContent = "Ocurrió un error: " + (data.error || "desconocido");
+          return;
+        }
+
+        $status.textContent = data.count
+          ? `Encontrados: ${data.count}`
+          : "No se encontraron documentos para ese número.";
+
+        if (!data.count) {
+          $results.innerHTML = `<div class="empty">Sin resultados</div>`;
+          return;
+        }
+
+        // Renderiza resultados
+        const frag = document.createDocumentFragment();
+        data.files.forEach(f => {
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.innerHTML = `
+            <div><strong>${f.name}</strong></div>
+            <div class="row">
+              <a class="btn" href="${f.viewUrl}" target="_blank" rel="noopener">Ver en Drive</a>
+              <a class="btn" href="${f.downloadUrl}" target="_blank" rel="noopener">Descargar PDF</a>
+              <!-- Si quieres vista previa embebida, usa f.previewUrl en un iframe -->
+            </div>
+          `;
+          frag.appendChild(card);
+        });
+        $results.innerHTML = "";
+        $results.appendChild(frag);
+
+      } catch (err) {
+        console.error(err);
+        $status.textContent = "Error de conexión. Intenta de nuevo.";
+      }
+    }
+
+    $btn.addEventListener('click', search);
+    $q.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') search();
+    });
+  </script>
+</body>
+</html>
